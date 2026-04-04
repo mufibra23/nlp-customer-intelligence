@@ -1,15 +1,14 @@
 """
 NLP Customer Intelligence Dashboard - 5-tab Streamlit app.
   Run: streamlit run app/streamlit_app.py
-
-Lightweight dashboard that loads only pre-computed CSV files and static images.
-No ML model loading at runtime — suitable for Streamlit Cloud (1GB RAM).
 """
 import os
+import sys
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
 # ---------------------------------------------------------------------------
@@ -17,11 +16,11 @@ import streamlit as st
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Customer Intelligence Engine", layout="wide")
 
-# All data comes from pre-computed processed files
-TOPICS_PATH = os.path.join("data", "processed", "tickets_with_topics.csv")
-FEATURES_PATH = os.path.join("data", "processed", "customer_features.csv")
-CHURN_PATH = os.path.join("data", "processed", "customer_churn_scores.csv")
-SHAP_DIR = os.path.join("models", "churn_plots")
+DATA_DIR = "data"
+TICKETS_PATH = os.path.join(DATA_DIR, "synthetic", "support_tickets.csv")
+TOPICS_PATH = os.path.join(DATA_DIR, "processed", "tickets_with_topics.csv")
+FEATURES_PATH = os.path.join(DATA_DIR, "processed", "customer_features.csv")
+CHURN_PATH = os.path.join(DATA_DIR, "processed", "customer_churn_scores.csv")
 
 SENTIMENT_COLORS = {"negative": "#EF553B", "neutral": "#636EFA", "positive": "#00CC96"}
 
@@ -29,6 +28,13 @@ SENTIMENT_COLORS = {"negative": "#EF553B", "neutral": "#636EFA", "positive": "#0
 # ---------------------------------------------------------------------------
 # Data loading (cached)
 # ---------------------------------------------------------------------------
+@st.cache_data
+def load_tickets():
+    df = pd.read_csv(TICKETS_PATH)
+    df["created_date"] = pd.to_datetime(df["created_date"])
+    return df
+
+
 @st.cache_data
 def load_topics():
     df = pd.read_csv(TOPICS_PATH)
@@ -52,8 +58,9 @@ def load_churn():
 st.sidebar.title("Customer Intelligence")
 st.sidebar.markdown("**NLP-powered insights from support tickets**")
 
-# Load data — tickets_with_topics.csv serves as the single ticket source
-tickets = load_topics()
+# Load data
+tickets = load_tickets()
+topics_df = load_topics()
 features = load_features()
 churn_df = load_churn()
 
@@ -71,8 +78,13 @@ if len(date_range) == 2:
         tickets["created_date"].dt.date <= date_range[1]
     )
     tickets_filtered = tickets[mask]
+    topics_filtered = topics_df[
+        (topics_df["created_date"].dt.date >= date_range[0])
+        & (topics_df["created_date"].dt.date <= date_range[1])
+    ]
 else:
     tickets_filtered = tickets
+    topics_filtered = topics_df
 
 categories = st.sidebar.multiselect(
     "Categories",
@@ -80,6 +92,7 @@ categories = st.sidebar.multiselect(
     default=sorted(tickets["category"].unique()),
 )
 tickets_filtered = tickets_filtered[tickets_filtered["category"].isin(categories)]
+topics_filtered = topics_filtered[topics_filtered["category"].isin(categories)]
 
 st.sidebar.markdown("---")
 st.sidebar.caption(f"Total tickets: {len(tickets_filtered):,}")
@@ -179,7 +192,7 @@ with tab2:
         "View topics for:", ["Negative", "Positive"], horizontal=True
     )
     sent_key = sentiment_filter.lower()
-    topic_subset = tickets_filtered[tickets_filtered["sentiment_label"] == sent_key]
+    topic_subset = topics_filtered[topics_filtered["sentiment_label"] == sent_key]
 
     if topic_subset["topic_id"].nunique() > 1:
         # Topic distribution bar chart
@@ -222,7 +235,7 @@ with tab2:
         with open(viz_path, "r", encoding="utf-8") as f:
             st.components.v1.html(f.read(), height=600, scrolling=True)
     else:
-        st.info("Topic map visualization not available in cloud deployment.")
+        st.warning(f"Visualization not found: {viz_path}")
 
 
 # ===================== TAB 3: TREND ANALYSIS =====================
@@ -265,9 +278,9 @@ with tab3:
 
     # Topic trends (negative topics over time)
     st.subheader("Negative Topic Trends")
-    neg_topics_trend = tickets_filtered[
-        (tickets_filtered["sentiment_label"] == "negative")
-        & (tickets_filtered["topic_id"] != -1)
+    neg_topics_trend = topics_filtered[
+        (topics_filtered["sentiment_label"] == "negative")
+        & (topics_filtered["topic_id"] != -1)
     ].copy()
     if not neg_topics_trend.empty:
         neg_topics_trend["month"] = neg_topics_trend["created_date"].dt.to_period("M").astype(str)
@@ -384,10 +397,10 @@ with tab4:
         csv_data, "high_risk_customers.csv", "text/csv",
     )
 
-    # SHAP plots (pre-rendered PNGs)
+    # SHAP plots
     st.subheader("Feature Importance (SHAP)")
-    shap_bar_path = os.path.join(SHAP_DIR, "shap_bar.png")
-    shap_summary_path = os.path.join(SHAP_DIR, "shap_summary.png")
+    shap_summary_path = "models/churn_plots/shap_summary.png"
+    shap_bar_path = "models/churn_plots/shap_bar.png"
     c1, c2 = st.columns(2)
     with c1:
         if os.path.exists(shap_bar_path):
@@ -406,9 +419,9 @@ with tab5:
     st.header("Product Improvement Signals")
     st.markdown("*Actionable insights from negative feedback, grouped by topic*")
 
-    neg_data = tickets_filtered[
-        (tickets_filtered["sentiment_label"] == "negative")
-        & (tickets_filtered["topic_id"] != -1)
+    neg_data = topics_filtered[
+        (topics_filtered["sentiment_label"] == "negative")
+        & (topics_filtered["topic_id"] != -1)
     ].copy()
 
     if not neg_data.empty:
@@ -474,4 +487,4 @@ with tab5:
 
 # Footer
 st.sidebar.markdown("---")
-st.sidebar.caption("Built with Streamlit + Plotly | NLP Customer Intelligence Engine")
+st.sidebar.caption("Built with PyTorch + BERTopic + XGBoost + Streamlit")
