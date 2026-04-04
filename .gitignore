@@ -2,7 +2,6 @@ __pycache__/
 *.py[cod]
 venv/
 .env
-.vscode/
 .idea/
 .claude/
 data/raw/
@@ -12,6 +11,7 @@ models/sentiment/
 models/topic/
 models/*.pkl
 models/*.joblib
+models/*.zip
 .ipynb_checkpoints/
 .DS_Store
 Thumbs.db
@@ -19,3 +19,7 @@ Thumbs.db
 !data/synthetic/.gitkeep
 !models/sentiment/.gitkeep
 !models/topic/.gitkeep
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
+branch_structure.json
